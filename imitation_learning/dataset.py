@@ -70,7 +70,6 @@ class KITTIDataset(torch.utils.data.Dataset):
 
         # Concat the frames together into the channel dimension
         s = sample['frames'].shape
-        #sample['frames'] = sample['frames'].view(s[0]*s[1], s[2], s[3])
         sample['frames'] = torch.reshape(sample['frames'], (s[0]*s[1], s[2], s[3]))
 
         return sample

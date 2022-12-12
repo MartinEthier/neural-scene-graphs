@@ -1,16 +1,18 @@
 import numpy as np
 
 
-# Vehicle setup constants (all distances in meters)
+# Sensor setup constants (all distances in meters)
 WHEELBASE = 2.71
 AXLE_HEIGHT = 0.3
 CAM_HEIGHT = 1.65 
 IMU_HEIGHT = 0.93
+FPS = 10 # Hz
+T_STEP = 1 / FPS # seconds
 
 # Original image size
 IMG_SIZE = (375, 1242) # (H, W)
 
-# Transformation matrices
+# Average transformation matrices (run calculate_calibration.py to get them)
 P2 = np.array([
     [7.16721350e+02, 0.00000000e+00, 6.07304470e+02, 4.51871514e+01],
     [0.00000000e+00, 7.16721350e+02, 1.76000546e+02, 1.60868480e-02],

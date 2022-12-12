@@ -1,46 +1,23 @@
-"""
-Takes trajectory taken by the ego and applies a random left/right disturbance at
-the chosen timestep. Using a simple controller, calculate a recovery trajectory 
-that brings the car from the disturbed state back to the ground truth trajectory.
-
-The nvidia e2e paper uses a pure pursuit controller but this only works because we
-predict steering angles instead of trajectories. An MPC controller is needed to
-produce full trajectories.
-
-Note: Trajectory poses from dataset are the camera poses. To properly use MPC, 
-transform reference trajectory poses to rear/front axle and run MPC using bicycle
-model with front/rear axle point, then transform output trajectory back to camera.
-
-From https://www.cvlibs.net/datasets/kitti/setup.php, can see that L=2.71 meters 
-and can get the transformation between camera and front/rear axle.
-"""
 import numpy as np
 from matplotlib import pyplot as plt
 import do_mpc
 
+from constants import WHEELBASE, T_STEP
 
-### Parameters
-# Model
-L = 2.71 # meters
-T_STEP = 0.1 # seconds (KITTI runs at 10 fps)
-# MPC settings
+
+# MPC parameters
 N_ROBUST = 0
 R_A = 1e-1
 R_PHI = 1e-1
 C_X = 1.0
 C_Y = 1.0
-C_V = 0.5
-# Trajectory
-L_TRAJ = 50 # length of gt trajectory
-MAX_Y_DISTURB = 1.0 # meters
-MAX_STEERING_DISTURB = 0.175 # ~10 deg in rad
-MAX_HEADING_DISTURB = 0.175 # ~10 deg in rad
-# Plotting
-arrow_scale = 50
-arrow_width = 3e-3
+MAX_ACCEL = 1.0 # m/s^2
+MAX_STEER_ANGLE = 0.52 # ~30 deg
+
 
 class MPC():
-    def __init__(self):
+    def __init__(self, horizon):
+        self.horizon = horizon
         self.model = None
         self.mpc = None
         self.simulator = None
@@ -65,15 +42,13 @@ class MPC():
         # Reference trajectory
         x_ref = self.model.set_variable('_tvp',  'pos_x')
         y_ref = self.model.set_variable('_tvp',  'pos_y')
-        v_ref = self.model.set_variable('_tvp',  'velocity')
-        theta_ref = self.model.set_variable('_tvp',  'heading_angle')
         
         # Define update equations
         x_next = x + T_STEP * v * np.cos(theta)
         y_next = y + T_STEP * v * np.sin(theta)
         v_next = v + T_STEP * a
         delta_next = delta + T_STEP * phi
-        theta_next = theta + T_STEP * v / L * np.tan(delta)
+        theta_next = theta + T_STEP * v / WHEELBASE * np.tan(delta)
 
         # Trick to wrap angle to [-pi, pi] range
         theta_next = np.arctan2(np.sin(theta_next), np.cos(theta_next))
@@ -91,7 +66,7 @@ class MPC():
         # Setup controller with params
         self.mpc = do_mpc.controller.MPC(self.model)
         mpc_params = {
-            'n_horizon': L_TRAJ-1,
+            'n_horizon': self.horizon,
             'n_robust': N_ROBUST,
             't_step': T_STEP,
             'state_discretization': 'discrete',
@@ -101,8 +76,7 @@ class MPC():
         
         # Configure objective function
         stage_cost = C_Y * (self.model.tvp['pos_y'] - self.model.x['pos_y'])**2 + \
-                    C_X * (self.model.tvp['pos_x'] - self.model.x['pos_x'])**2 + \
-                    C_V * (self.model.tvp['velocity'] - self.model.x['velocity'])**2
+                    C_X * (self.model.tvp['pos_x'] - self.model.x['pos_x'])**2
         terminal_cost = stage_cost
         self.mpc.set_objective(mterm=terminal_cost, lterm=stage_cost)
         self.mpc.set_rterm(
@@ -114,18 +88,17 @@ class MPC():
         self.ref_traj = ref_traj
         tvp_template = self.mpc.get_tvp_template()
         def tvp_fun(t_now):
-            for k in range(L_TRAJ):
+            for k in range(self.horizon+1):
                 tvp_template['_tvp', k, 'pos_x'] = self.ref_traj['pos_x'][k]
                 tvp_template['_tvp', k, 'pos_y'] = self.ref_traj['pos_y'][k]
-                tvp_template['_tvp', k, 'velocity'] = self.ref_traj['velocity'][k]
             return tvp_template
         self.mpc.set_tvp_fun(tvp_fun)
 
         # Set bounds
-        self.mpc.bounds['lower','_x', 'steering_angle'] = -0.52 # ~-30 deg
-        self.mpc.bounds['upper','_x', 'steering_angle'] = 0.52 # ~30 deg
-        self.mpc.bounds['lower','_u', 'acceleration'] = -1.0
-        self.mpc.bounds['upper','_u', 'acceleration'] = 1.0
+        self.mpc.bounds['lower','_x', 'steering_angle'] = -MAX_STEER_ANGLE
+        self.mpc.bounds['upper','_x', 'steering_angle'] = MAX_STEER_ANGLE
+        self.mpc.bounds['lower','_u', 'acceleration'] = -MAX_ACCEL
+        self.mpc.bounds['upper','_u', 'acceleration'] = MAX_ACCEL
 
         self.mpc.setup()
 
@@ -162,62 +135,46 @@ class MPC():
         u0 = self.mpc.make_step(self.x0)
         
         # Plot reference trajectory
-        plt.quiver(
-            self.ref_traj['pos_x'],
-            self.ref_traj['pos_y'],
-            np.ones(L_TRAJ),
-            np.ones(L_TRAJ),
-            angles=self.ref_traj['heading_angle']*180/np.pi,
-            color='green',
-            scale=arrow_scale,
-            width=arrow_width,
-            label="ref_traj"
-        )
+        plt.plot(self.ref_traj['pos_x'], self.ref_traj['pos_y'], color='green', label='ref_traj')
         
         # Plot the predicted trajectory
         pos_x_pred = self.mpc.data.prediction(('_x', 'pos_x'))[0,:,0]
         pos_y_pred = self.mpc.data.prediction(('_x', 'pos_y'))[0,:,0]
-        heading_angle_pred = self.mpc.data.prediction(('_x', 'heading_angle'))[0,:,0]
-        plt.quiver(
-            pos_x_pred,
-            pos_y_pred,
-            np.ones(L_TRAJ),
-            np.ones(L_TRAJ),
-            angles=heading_angle_pred*180/np.pi,
-            color='red',
-            scale=arrow_scale,
-            width=arrow_width,
-            label='pred_traj'
-        )
+        plt.plot(pos_x_pred, pos_y_pred, color='red', label='pred_traj')
 
         plt.legend(loc='best')
-        plt.savefig("mpc_trajectory.png")
+        plt.xlabel("X (m)")
+        plt.ylabel("Y (m)")
+        plt.savefig("test_images/mpc_trajectory.png")
 
 if __name__=="__main__":
-    # Generate the reference trajectory
-    # Trajectory is relative to pose a t=0 so pose at t=0 should be x=0,y=0,yaw=0
-    gt_x = np.arange(L_TRAJ)
-    w = 0.15
-    C = 0.4
-    gt_y = C * (np.cos(w * gt_x) - 1)
-    #gt_y = np.zeros(L_TRAJ)
-    gt_v = 1/T_STEP * np.ones(L_TRAJ)
-    gt_heading = -w * C * np.sin(w * gt_x) # derivative of gt_y
+    # Load a KITTI trajectory to test
+    from pathlib import Path
+    from kitti_trajectory import load_oxts_poses
+    oxts_path = Path("~/repos/neural-scene-graphs/data/kitti/testing/oxts/0014.txt").expanduser()
+    t0 = 100
+    horizon = 50
+    poses = load_oxts_poses(oxts_path, t0, horizon)
+    gt_x = np.array([pose[0, 3] for pose in poses])
+    gt_y = np.array([pose[1, 3] for pose in poses])
     gt_trajectory = {
         'pos_x': gt_x,
         'pos_y': gt_y,
-        'velocity': gt_v,
-        'heading_angle': gt_heading
     }
 
-    # Sample a new random starting pose
-    y_new = gt_y[0] + np.random.uniform(-MAX_Y_DISTURB, MAX_Y_DISTURB)
-    delta_new = np.random.uniform(-MAX_STEERING_DISTURB, MAX_STEERING_DISTURB)
-    theta_new = np.random.uniform(-MAX_HEADING_DISTURB, MAX_HEADING_DISTURB)
-    x0 = np.array([0.0, y_new, 1/T_STEP, delta_new, theta_new]) # [x, y, v, delta, theta]
+    # Apply disturbance to starting pose
+    y_offset = 0.5
+    steering_offset = -0.087 # 5 deg in rad
+    heading_offset = -0.087 # 5 deg in rad
+    y_new = gt_y[0] + y_offset
+
+    # Set initial velocity to be the same as path
+    v0 = ((gt_x[1]-gt_x[0])**2 + (gt_y[1]-gt_y[0])**2)**0.5 / T_STEP
+
+    x0 = np.array([0.0, y_new, v0, steering_offset, heading_offset]) # [x, y, v, delta, theta]
 
     # Run MPC and plot predicted trajectory
-    mpc = MPC()
+    mpc = MPC(horizon)
     mpc.setup(gt_trajectory)
     mpc.set_initial(x0)
     mpc.plot_trajectory()

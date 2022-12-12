@@ -13,7 +13,7 @@ from kitti_trajectory import load_oxts_poses
 
 
 GRAD_SPIKE_THRESH = 0.06
-DEBUG_PLOT = False
+DEBUG_PLOT = True
 
 
 def get_valid_paths(positions, horizon):
@@ -32,9 +32,11 @@ def get_valid_paths(positions, horizon):
     spike_mask = grad_diffs > GRAD_SPIKE_THRESH
 
     if DEBUG_PLOT:
-        plt.plot(grad_diffs, label="grad_diffs")
+        plt.plot(grad_diffs)
         plt.axhline(GRAD_SPIKE_THRESH, color='r')
-        plt.savefig("grad_diffs.png")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Path gradient difference")
+        plt.savefig("test_images/grad_diffs.png")
 
     # Find all paths with no glitches in horizon
     valid_t0 = []

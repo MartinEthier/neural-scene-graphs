@@ -133,47 +133,14 @@ def load_oxts_poses(oxts_path, t0=None, horizon=None):
 
 
 if __name__=="__main__":
-    # Load a sequence and extract poses
-    oxts_path = Path("/home/methier/repos/neural-scene-graphs/data/kitti/testing/oxts/0014.txt").expanduser()
-
+    # Load a sample sequence and extract poses
+    oxts_path = Path("~/repos/neural-scene-graphs/data/kitti/testing/oxts/0014.txt").expanduser()
     poses = load_oxts_poses(oxts_path)
     print(len(poses))
     print(poses[0])
-    t0 = 300
-    # t0 = 505
-    hor = 50
-    x = np.array([pose[0, 3] for pose in poses][t0:t0+hor])
-    y = np.array([pose[1, 3] for pose in poses][t0:t0+hor])
-
-    plt.plot(x, y)
-    plt.savefig("kitti_trajectory.png")
-
-    # Convert poses to xy trajectory
     x = np.array([pose[0, 3] for pose in poses])
     y = np.array([pose[1, 3] for pose in poses])
-    positions = np.stack((x, y), axis=1)
-
-    # Identify glitch using gradient
-    GRAD_SPIKE_THRESH = 0.05
-    pos = np.stack((x, y), axis=1)[t0:t0+hor]
-    print(pos.shape)
-    grads = np.mean(np.gradient(pos, axis=0), axis=1)
-    print(grads.shape)
-    grad_diffs = np.abs(np.diff(grads))
-    # Condition for a glitch
-    if np.any(grad_diffs > GRAD_SPIKE_THRESH):
-        print('glitch')
-
-    # Try using angles
-    vectors = np.diff(pos, axis=0)
-    print(vectors.shape)
-    angles = np.arctan2(vectors[:, 1], vectors[:, 0])
-    print(angles.shape)
-    angles = np.unwrap(angles)
-    angle_diff = np.abs(np.diff(angles))
-
-    plt.clf()
-    #plt.plot(angle_diff, label="angle")
-    plt.plot(grad_diffs, label="grad")
-    plt.legend(loc="best")
-    plt.savefig("grads.png")
+    plt.plot(x, y)
+    plt.xlabel("X (m)")
+    plt.ylabel("Y (m)")
+    plt.savefig("test_images/kitti_trajectory_testing_0014.png")
