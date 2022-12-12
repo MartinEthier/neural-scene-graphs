@@ -20,7 +20,7 @@ class E2EModel(nn.Module):
             cfg['name'],
             pretrained=True,
             num_classes=0,
-            in_chans=cfg['in_channels'],
+            in_chans=3*cfg['num_frames'],
             drop_rate=cfg['dropout_prob']
         )
         
@@ -37,19 +37,22 @@ class E2EModel(nn.Module):
         X = F.leaky_relu(X)
         X = self.dropout(X)
         X = self.fc_out(X)
+
+        # Reshape from (B, horizon*2) to (B, horizon, 2)
+        X = X.view(X.shape[0], -1, 2)
+
         return X
 
 if __name__=="__main__":
     cfg = {
         "name": "resnet34",
         "timm_feat_size": 512,
-        "num_fc_layers": 2,
         "fc_size": 256,
         "output_size": 50*2,
         "dropout_prob": 0.2,
-        "in_channels": 3
+        "num_frames": 2
 
     }
     model = E2EModel(cfg) 
-    output = model(torch.randn(4, 3, 224, 224))
+    output = model(torch.randn(4, 6, 256, 256))
     print(output.shape)

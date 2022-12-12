@@ -68,6 +68,11 @@ class KITTIDataset(torch.utils.data.Dataset):
         if self.full_transforms is not None:
             sample = self.full_transforms(sample)
 
+        # Concat the frames together into the channel dimension
+        s = sample['frames'].shape
+        #sample['frames'] = sample['frames'].view(s[0]*s[1], s[2], s[3])
+        sample['frames'] = torch.reshape(sample['frames'], (s[0]*s[1], s[2], s[3]))
+
         return sample
 
 
@@ -86,13 +91,14 @@ if __name__=="__main__":
     print(len(val_set))
 
     # Visualize a sample
-    sample = train_set[1500]
+    sample = train_set[6000]
     print(sample['frames'].shape)
     print(sample['label_path'].shape)
-    frame = sample['frames'][-1]
-    print(frame.shape)
-    frame = Denormalize(mean=norm_mean, std=norm_std)(frame)
-    frame = utils.tensor_to_array(frame)
+    frame = sample['frames'][-3:]
+    frame = Denormalize()(frame)
+    img = utils.tensor_to_array(frame)
+    label_path = sample['label_path'].numpy()
+    img = utils.display_path(img, label_path)
 
-    plt.imshow(frame)
+    plt.imshow(img)
     plt.savefig("test_images/dataset_sample.png")

@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 from matplotlib import pyplot as plt
 
+from constants import TR_IMU_REARAXLE
+
 
 # Per dataformat.txt
 OxtsPacket = namedtuple('OxtsPacket',
@@ -115,19 +117,17 @@ def load_oxts_poses(oxts_path, t0=None, horizon=None):
 
             R, t = pose_from_oxts_packet(packet, scale)
 
-            # # Current pose is in IMU frame, convert to middle of rear axle
-            # print('---')
-            # print(R)
-            # print(t)
-
+            # Current pose is in IMU frame, convert to middle of rear axle
+            t_vec = np.append(t, 1.0)[:, np.newaxis]
+            t = (TR_IMU_REARAXLE @ t_vec)[:3, 0]
 
             if T_origin_inv is None:
                 T_origin_inv = np.linalg.inv(transform_from_rot_trans(R, t))
 
             # Calculate pose relative to origin
-            T_w_imu = T_origin_inv @ transform_from_rot_trans(R, t)
+            rel_pose = T_origin_inv @ transform_from_rot_trans(R, t)
 
-            poses.append(T_w_imu)
+            poses.append(rel_pose)
 
     return poses
 
@@ -144,18 +144,7 @@ if __name__=="__main__":
     hor = 50
     x = np.array([pose[0, 3] for pose in poses][t0:t0+hor])
     y = np.array([pose[1, 3] for pose in poses][t0:t0+hor])
-    yaws = [np.arctan2(pose[1, 0], pose[0, 0])*180/np.pi for pose in poses][t0:t0+hor]
 
-    # plt.quiver(
-    #     x,
-    #     y,
-    #     np.ones(hor),
-    #     np.ones(hor),
-    #     angles=yaws,
-    #     color='red',
-    #     scale=50,
-    #     width=4e-3
-    # )
     plt.plot(x, y)
     plt.savefig("kitti_trajectory.png")
 
@@ -163,9 +152,6 @@ if __name__=="__main__":
     x = np.array([pose[0, 3] for pose in poses])
     y = np.array([pose[1, 3] for pose in poses])
     positions = np.stack((x, y), axis=1)
-
-    #
-
 
     # Identify glitch using gradient
     GRAD_SPIKE_THRESH = 0.05
