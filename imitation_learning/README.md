@@ -2,12 +2,33 @@
 
 This folder contains all the code needed to train a model to predict trajectories from input images on the KITTI tracking dataset.
 
+## Environment
+
+Setup the pytorch conda environment by running:
+
+```bash
+conda env create -f environment.yml
+```
+
 ## Dataset
-Need a split file under the data/kitti folder that says which scenes are in train/val
+Setup the KITTI tracking dataset as described in the base README for the neural-scene-graphs repo. Then, run the pre-processing script to remove outliers and split the dataset:
 
-Run the preprocess_dataset file to pre-calculate the poses, remove outliers (gps glitches), and split into train/val
+```bash
+python preprocess_dataset.py <path_to_kitti_folder>
+```
 
-Ex of gps glitch in /home/methier/repos/neural-scene-graphs/data/kitti/training/image_02/0019/000509.png
+## Training
 
-Try setting up simulator with the warp transform instead of the NeRF:
-https://stackoverflow.com/questions/45811421/python-create-image-with-new-camera-position
+To train an end-to-end trajectory planning model, edit the "root_dir" value in the config directory at the bottom of the train.py script and run:
+
+```bash
+python train.py
+```
+
+## MPC Recovery Trajectory
+
+To test out the MPC recovery trajectory calculation, you can play with the settings in the mpc_recovery.py script and then run:
+
+```bash
+python mpc_recovery.py
+```
