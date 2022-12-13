@@ -191,8 +191,8 @@ if __name__=="__main__":
         "hue": 0.3,
 
         # Model
-        "name": "regnety_032",
-        "timm_feat_size": 1512, # Depends on model
+        "name": "regnety_008",
+        "timm_feat_size": 768,
         "fc_size": 128,
         "output_size": 50*2,
         "dropout_prob": 0.3,
